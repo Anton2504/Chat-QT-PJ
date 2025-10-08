@@ -303,74 +303,66 @@ void Database::runDB(){
 
     query.exec("USE Chat_db");
 
-    query.exec("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = Chat_db");
-    if (query.next()){
-        if (query.value(0).toInt() == 0){
+    query.exec("CREATE TABLE IF NOT EXISTS users ("
+               "uuid BINARY(16) NOT NULL PRIMARY KEY,"
+               " login VARCHAR(20) NOT NULL UNIQUE KEY,"
+               " status BINARY(1) NOT NULL)");
 
-            query.exec("CREATE TABLE IF NOT EXISTS users ("
-                       "uuid BINARY(16) NOT NULL PRIMARY KEY,"
-                       " login VARCHAR(20) NOT NULL UNIQUE KEY,"
-                       " status BINARY(1) NOT NULL)");
-
-            query.exec("CREATE TABLE IF NOT EXISTS `users_login` ("
-                       "`user_uuid` BINARY(16) NOT NULL UNIQUE KEY,"
-                       "`pwd` binary(32) DEFAULT NULL,"
-                       "CONSTRAINT `pass_FK` FOREIGN KEY (`user_uuid`) "
-                       "REFERENCES `users` (`uuid`) ON DELETE CASCADE ON UPDATE CASCADE"
-                       ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;");
+    query.exec("CREATE TABLE IF NOT EXISTS `users_login` ("
+               "`user_uuid` BINARY(16) NOT NULL UNIQUE KEY,"
+               "`pwd` binary(32) DEFAULT NULL,"
+               "CONSTRAINT `pass_FK` FOREIGN KEY (`user_uuid`) "
+               "REFERENCES `users` (`uuid`) ON DELETE CASCADE ON UPDATE CASCADE"
+               ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;");
 
 
-            query.exec("CREATE TABLE IF NOT EXISTS `messages` ("
-                       "`uuid_msg` binary(16) NOT NULL,"
-                       "`text` varchar(1024),"
-                       "`uuid_sender` binary(16) NOT NULL,"
-                       "`uuid_recipient` binary(16) NOT NULL,"
-                       "`status_msg` tinyint(1) DEFAULT NULL,"
-                       "`dateime` datetime NOT NULL,"
-                       "PRIMARY KEY (`uuid_msg`),"
-                       "KEY `messages_users_FK` (`uuid_sender`),"
-                       "CONSTRAINT `messages_users_FK` FOREIGN KEY (`uuid_sender`) "
-                       "REFERENCES `users` (`uuid`) ON DELETE CASCADE ON UPDATE CASCADE"
-                       ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;");
+    query.exec("CREATE TABLE IF NOT EXISTS `messages` ("
+               "`uuid_msg` binary(16) NOT NULL,"
+               "`text` varchar(1024),"
+               "`uuid_sender` binary(16) NOT NULL,"
+               "`uuid_recipient` binary(16) NOT NULL,"
+               "`status_msg` tinyint(1) DEFAULT NULL,"
+               "`dateime` datetime NOT NULL,"
+               "PRIMARY KEY (`uuid_msg`),"
+               "KEY `messages_users_FK` (`uuid_sender`),"
+               "CONSTRAINT `messages_users_FK` FOREIGN KEY (`uuid_sender`) "
+               "REFERENCES `users` (`uuid`) ON DELETE CASCADE ON UPDATE CASCADE"
+               ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;");
 
-            query.exec("CREATE TABLE IF NOT EXISTS `chat` ("
-                       "`uuid_chatmsg` binary(16) NOT NULL,"
-                       "`text` varchar(255),"
-                       "`user_uuid` binary(16) NOT NULL,"
-                       "`datetime` datetime NOT NULL,"
-                       "PRIMARY KEY (`uuid_chatmsg`),"
-                       "KEY `chat_ibfk_1` (`user_uuid`),"
-                       "CONSTRAINT `chat_ibfk_1` FOREIGN KEY (`user_uuid`) "
-                       "REFERENCES `users` (`uuid`) ON DELETE CASCADE ON UPDATE CASCADE"
-                       ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;");
-            query.exec("CREATE TRIGGER IF NOT EXISTS upd_user "
-                       " AFTER INSERT ON users FOR EACH ROW begin "
-                       " insert into users_login (user_uuid, pwd) values (new.uuid,Null); "
-                       " end;");
+    query.exec("CREATE TABLE IF NOT EXISTS `chat` ("
+               "`uuid_chatmsg` binary(16) NOT NULL,"
+               "`text` varchar(255),"
+               "`user_uuid` binary(16) NOT NULL,"
+               "`datetime` datetime NOT NULL,"
+               "PRIMARY KEY (`uuid_chatmsg`),"
+               "KEY `chat_ibfk_1` (`user_uuid`),"
+               "CONSTRAINT `chat_ibfk_1` FOREIGN KEY (`user_uuid`) "
+               "REFERENCES `users` (`uuid`) ON DELETE CASCADE ON UPDATE CASCADE"
+               ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;");
+    query.exec("CREATE TRIGGER IF NOT EXISTS upd_user "
+               " AFTER INSERT ON users FOR EACH ROW begin "
+               " insert into users_login (user_uuid, pwd) values (new.uuid,Null); "
+               " end;");
 
-            QByteArray status_Admin(1, '\x28');
-            QUuid uuid = QUuid::createUuidV7();
-            query.prepare("INSERT INTO users (uuid, login, status) VALUES (UUID_TO_BIN(:uuid), :login, :status)");
-            query.bindValue(":uuid", uuid);
+    QByteArray status_Admin(1, '\x28');
+    QUuid uuid = QUuid::createUuidV7();
+    query.prepare("INSERT INTO users (uuid, login, status) VALUES (UUID_TO_BIN(:uuid), :login, :status)");
+    query.bindValue(":uuid", uuid);
+    query.bindValue(":login", "Admin");
+    query.bindValue(":status", status_Admin);
+    if(!query.exec()){
+        qDebug() << "Error inserting record:" << query.lastError().text();
+    }else{
+        QString pass = "c1c224b03cd9bc7b6a86d77f5dace40191766c485cd55dc48caf9ac873335d6f"; //sha256 "Admin"
+        QByteArray pwd = QByteArray::fromHex(pass.toLatin1());
+        query.prepare("UPDATE users_login SET pwd = :pwd where user_uuid = UUID_TO_BIN(:uuid)");
+        query.bindValue(":pwd", pwd);
+        query.bindValue(":uuid", uuid);
+        if(!query.exec()){
+            qDebug() << "Error inserting record:" << query.lastError().text();
+            query.prepare("DELETE FROM users where login = :login");
             query.bindValue(":login", "Admin");
-            query.bindValue(":status", status_Admin);
-            if(!query.exec()){
-                qDebug() << "Error inserting record:" << query.lastError().text();
-            }else{
-                QString pass = "c1c224b03cd9bc7b6a86d77f5dace40191766c485cd55dc48caf9ac873335d6f"; //sha256 "Admin"
-                QByteArray pwd = QByteArray::fromHex(pass.toLatin1());
-                query.prepare("UPDATE users_login SET pwd = :pwd where user_uuid = UUID_TO_BIN(:uuid)");
-                query.bindValue(":pwd", pwd);
-                query.bindValue(":uuid", uuid);
-                if(!query.exec()){
-                    qDebug() << "Error inserting record:" << query.lastError().text();
-                    query.prepare("DELETE FROM users where login = :login");
-                    query.bindValue(":login", "Admin");
-                    query.exec();
-                }
-            }
+            query.exec();
         }
     }
 }
-
-
